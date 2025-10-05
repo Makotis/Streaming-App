@@ -1,0 +1,15 @@
+{
+  "name": "music-streaming-platform",
+  "version": "1.0.0",
+  "description": "A simple music streaming platform with AWS integration",
+  "main": "index.js",
+  "scripts": {
+    "dev": "docker-compose up -d",
+    "build": "docker-compose build",
+    "stop": "docker-compose down",
+    "logs": "docker-compose logs -f"
+  },
+  "keywords": ["music", "streaming", "aws", "docker"],
+  "author": "",
+  "license": "MIT"
+}
