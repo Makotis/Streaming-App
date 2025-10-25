@@ -56,32 +56,20 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: https://music.ats-victorycenter.org
     container_name: music_frontend
-    environment:
-      REACT_APP_API_URL: https://music.ats-victorycenter.org
-      DANGEROUSLY_DISABLE_HOST_CHECK: "true"
-      WDS_SOCKET_HOST: music.ats-victorycenter.org
-      WDS_SOCKET_PORT: 443
-      WDS_SOCKET_PATH: /ws
-      WDS_SOCKET_PROTOCOL: wss
-      HTTPS: "true"
-      CHOKIDAR_USEPOLLING: "true"
-    ports:
-      - "3000:3000"
+    restart: unless-stopped
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     networks:
       - music_network
-    command: npm start
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`music.ats-victorycenter.org`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
 
   # Traefik Reverse Proxy
   traefik:
