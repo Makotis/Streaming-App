@@ -63,6 +63,8 @@ services:
       WDS_SOCKET_HOST: music.ats-victorycenter.org
       WDS_SOCKET_PORT: 443
       WDS_SOCKET_PATH: /ws
+      WDS_SOCKET_PROTOCOL: wss
+      HTTPS: "true"
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "3000:3000"
