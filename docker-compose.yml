@@ -43,6 +43,13 @@ services:
     networks:
       - music_network
     command: npm run dev
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`music.ats-victorycenter.org`) && PathPrefix(`/api`, `/health`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=3001"
+      - "traefik.http.routers.backend.priority=100"
 
   # Frontend React App
   frontend:
@@ -51,7 +58,12 @@ services:
       dockerfile: Dockerfile
     container_name: music_frontend
     environment:
-      REACT_APP_API_URL: http://localhost:3001
+      REACT_APP_API_URL: https://music.ats-victorycenter.org
+      DANGEROUSLY_DISABLE_HOST_CHECK: "true"
+      WDS_SOCKET_HOST: music.ats-victorycenter.org
+      WDS_SOCKET_PORT: 443
+      WDS_SOCKET_PATH: /ws
+      CHOKIDAR_USEPOLLING: "true"
     ports:
       - "3000:3000"
     depends_on:
@@ -62,20 +74,37 @@ services:
     networks:
       - music_network
     command: npm start
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`music.ats-victorycenter.org`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
-  # Nginx Reverse Proxy
-  nginx:
-    image: nginx:alpine
-    container_name: music_nginx
+  # Traefik Reverse Proxy
+  traefik:
+    image: traefik:v2.10
+    container_name: music_traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-    depends_on:
-      - frontend
-      - backend
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/traefik.yml:ro
+      - ./letsencrypt:/letsencrypt
     networks:
       - music_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`music.ats-victorycenter.org`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=dashboard-auth"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=admin:$$apr1$$8EVjn/nj$$GiLUZqcbueTFeD23SuB6x0"  # admin/admin - CHANGE THIS!
 
 volumes:
   postgres_data:
