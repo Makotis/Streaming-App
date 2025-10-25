@@ -1,0 +1,46 @@
+http:
+  middlewares:
+    # Rate limiting
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
+
+    # Security headers
+    security-headers:
+      headers:
+        sslRedirect: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "geolocation=(), microphone=(), camera=()"
+        customResponseHeaders:
+          X-Robots-Tag: "none,noarchive,nosnippet,notranslate,noimageindex"
+          server: ""
+          X-Powered-By: ""
+
+    # Compression
+    compression:
+      compress: true
+
+    # CORS for API
+    api-cors:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowOriginList:
+          - "https://music.ats-victorycenter.org"
+        accessControlAllowHeaders:
+          - "Content-Type"
+          - "Authorization"
+        accessControlMaxAge: 100
+        addVaryHeader: true

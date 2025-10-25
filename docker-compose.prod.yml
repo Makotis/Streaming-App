@@ -1,0 +1,126 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: music_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-music_streaming}
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - music_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: music_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - music_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/health`))"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=3001"
+      - "traefik.http.routers.backend.priority=100"
+      # Security headers
+      - "traefik.http.middlewares.backend-security.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.backend-security.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.backend-security.headers.stsPreload=true"
+      - "traefik.http.routers.backend.middlewares=backend-security"
+
+  # Frontend React App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        REACT_APP_API_URL: https://${DOMAIN}
+    container_name: music_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - music_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      # Security headers
+      - "traefik.http.middlewares.frontend-security.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.frontend-security.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.frontend-security.headers.stsPreload=true"
+      - "traefik.http.middlewares.frontend-security.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.frontend-security.headers.browserXssFilter=true"
+      - "traefik.http.middlewares.frontend-security.headers.frameDeny=true"
+      - "traefik.http.routers.frontend.middlewares=frontend-security"
+
+  # Traefik Reverse Proxy
+  traefik:
+    image: traefik:v2.10
+    container_name: music_traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL=${LETSENCRYPT_EMAIL}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./letsencrypt:/letsencrypt
+      - ./logs/traefik:/var/log/traefik
+    networks:
+      - music_network
+    labels:
+      - "traefik.enable=true"
+      # Dashboard
+      - "traefik.http.routers.dashboard.rule=Host(`${DOMAIN}`) && (PathPrefix(`/traefik`) || PathPrefix(`/dashboard-traefik`))"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth,dashboard-stripprefix"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+      - "traefik.http.middlewares.dashboard-stripprefix.stripprefix.prefixes=/traefik"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  music_network:
+    driver: bridge
